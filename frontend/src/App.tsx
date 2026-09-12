@@ -1,20 +1,17 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import Router from '@/routes';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+});
 
 function App() {
   return (
-    <section id="center" className="flex min-h-screen items-center justify-center">
-      <Card className="w-80">
-        <CardHeader>
-          <CardTitle className="text-center text-3xl font-bold underline">FraudGuard</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center gap-4">
-          <Badge>Transaction Risk & Explainability Engine</Badge>
-          <Button>Click</Button>
-        </CardContent>
-      </Card>
-    </section>
+    <QueryClientProvider client={queryClient}>
+      <Router />
+    </QueryClientProvider>
   );
 }
 
