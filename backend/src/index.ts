@@ -1,11 +1,13 @@
-import express, { type Express, type Request, type Response } from 'express';
+import express, { type Express } from 'express';
+import cors from 'cors';
+import { router } from './routes/index.js';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).send('Server is healthy');
-});
+app.use(cors());
+app.use(express.json());
+app.use(router);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
