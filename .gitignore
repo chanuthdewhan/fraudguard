@@ -1,6 +1,29 @@
-# IDEs and Editors
-.idea/
-.vscode/
+# Node
+node_modules/
+dist/
+build/
+.next/
 
-# Environment variables 
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Environment secrets - never commit real values
 .env
+.env.local
+
+# ML artifacts and data 
+ml-service/models/*.pkl
+ml-service/data/raw/*
+!ml-service/data/raw/.gitkeep
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
