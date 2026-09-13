@@ -4,13 +4,13 @@ Transaction risk scoring system with explainable ML predictions.
 
 ## Status
 
-Early development.
+In development. Backend, frontend, and ml-service are all scaffolded and running locally.
 
 ## Structure
 
 - `backend/` - Express + TypeScript API
-- `ml-service/` - Python ML service (not yet scaffolded)
-- `frontend/` - React app (not yet scaffolded)
+- `ml-service/` - Python FastAPI ML service
+- `frontend/` - React + Tailwind dashboard
 
 ## Setup
 
