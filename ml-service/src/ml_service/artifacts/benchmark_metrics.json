@@ -2,15 +2,15 @@
   {
     "model_name":"Logistic Regression",
     "imbalance_strategy":"None (Baseline)",
-    "pr_auc":1.0,
-    "roc_auc":1.0,
-    "f1":1.0,
-    "precision":1.0,
+    "pr_auc":0.9908,
+    "roc_auc":0.9999,
+    "f1":0.9967,
+    "precision":0.9934,
     "recall":1.0,
     "confusion_matrix":[
       [
-        4850,
-        0
+        4849,
+        1
       ],
       [
         0,
@@ -23,13 +23,13 @@
     "imbalance_strategy":"Class Weight",
     "pr_auc":1.0,
     "roc_auc":1.0,
-    "f1":1.0,
-    "precision":1.0,
+    "f1":0.9967,
+    "precision":0.9934,
     "recall":1.0,
     "confusion_matrix":[
       [
-        4850,
-        0
+        4849,
+        1
       ],
       [
         0,
@@ -61,13 +61,13 @@
     "imbalance_strategy":"Scale Pos Weight",
     "pr_auc":1.0,
     "roc_auc":1.0,
-    "f1":0.9967,
-    "precision":0.9934,
+    "f1":1.0,
+    "precision":1.0,
     "recall":1.0,
     "confusion_matrix":[
       [
-        4849,
-        1
+        4850,
+        0
       ],
       [
         0,

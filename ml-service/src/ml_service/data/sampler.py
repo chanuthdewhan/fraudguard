@@ -39,18 +39,22 @@ def generate_synthetic_paysim(n_samples: int = 25000, fraud_ratio: float = 0.03,
         else:  # CASH_IN
             legit_new_orig[i] = round(old_o + amt, 2)
 
-    legit_old_dest = rng.lognormal(mean=8.2, sigma=1.8, size=n_legit).round(2)
+    legit_old_dest = np.zeros(n_legit)
     legit_new_dest = np.zeros(n_legit)
     for i in range(n_legit):
         t = legit_types[i]
         amt = legit_amounts[i]
-        old_d = legit_old_dest[i]
         if t in ["CASH_OUT", "TRANSFER"]:
+            old_d = round(float(rng.lognormal(mean=8.2, sigma=1.8)), 2)
+            legit_old_dest[i] = old_d
             legit_new_dest[i] = round(old_d + amt, 2)
         elif t == "CASH_IN":
+            old_d = round(float(rng.lognormal(mean=8.2, sigma=1.8)), 2)
+            legit_old_dest[i] = old_d
             legit_new_dest[i] = max(0.0, round(old_d - amt, 2))
-        else:
-            legit_new_dest[i] = old_d
+        else:  # PAYMENT and DEBIT have 0 balance tracked in PaySim
+            legit_old_dest[i] = 0.0
+            legit_new_dest[i] = 0.0
 
     legit_df = pd.DataFrame({
         "step": legit_steps,
