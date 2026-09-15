@@ -81,3 +81,4 @@ class ModelInfoResponse(BaseModel):
     model_type: str
     features: list[str]
     benchmarks: list[dict[str, Any]]
+

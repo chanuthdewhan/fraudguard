@@ -118,3 +118,4 @@ def test_api_model_info():
     assert "features" in data
     assert len(data["features"]) > 0
     assert len(data["benchmarks"]) > 0
+
