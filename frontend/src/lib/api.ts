@@ -167,3 +167,4 @@ export async function getModelInfo(): Promise<ModelInfoData> {
   if (!res.ok) throw new Error('Failed to fetch model info');
   return res.json();
 }
+
