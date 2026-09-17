@@ -9,14 +9,13 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.141.1",
-    "imbalanced-learn>=0.14.0",
     "joblib>=1.6.0",
     "pandas>=3.0.5",
     "pydantic>=2.13.5",
     "scikit-learn>=1.9.1",
     "shap>=0.52.0",
     "uvicorn>=0.52.4",
-    "xgboost>=3.4.1",
+    "xgboost-cpu>=3.4.1",
 ]
 
 [project.scripts]
@@ -28,12 +27,5 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.0",
     "ipykernel>=7.3.0",
-    "pytest>=8.0.0",
-    "ruff>=0.9.0",
 ]
-
-[tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]
