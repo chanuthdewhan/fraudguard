@@ -5,6 +5,7 @@ import {
   listTransactionsHandler,
   predictHandler,
 } from '../controllers/prediction.controller.js';
+import { getStatsHandler } from '../controllers/stats.controller.js';
 
 export const router = Router();
 
@@ -15,3 +16,6 @@ router.get('/health', healthCheckHandler);
 router.post('/predict', predictHandler);
 router.get('/transactions', listTransactionsHandler);
 router.get('/transactions/:id', getTransactionHandler);
+
+// Stats
+router.get('/stats', getStatsHandler);
