@@ -1,50 +1,60 @@
+// Prisma schema for FraudGuard.
+// A Transaction and the Prediction the ML service returned for it.
+
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-enum RiskTier {
-  LOW
-  MEDIUM
-  HIGH
+// Enums enforce valid values at the database level, not just in application
+// code - a bug that somehow bypasses Zod/Pydantic validation still can't
+// insert an invalid type or risk tier.
+enum TransactionType {
+  CASH_IN
+  CASH_OUT
+  DEBIT
+  PAYMENT
+  TRANSFER
 }
 
-enum ReviewStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  ESCALATED
+enum RiskTier {
+  low
+  medium
+  high
 }
 
 model Transaction {
-  id               String       @id @default(uuid())
-  step             Int
-  type             String
-  amount           Float
-  nameOrig         String
-  oldbalanceOrg    Float
-  newbalanceOrig   Float
-  nameDest         String
-  oldbalanceDest   Float
-  newbalanceDest   Float
-  isFraud          Boolean      @default(false)
-  isFlaggedFraud   Boolean      @default(false)
-  riskScore        Int          @default(0)
-  riskTier         RiskTier     @default(LOW)
-  fraudProbability Float        @default(0.0)
-  status           ReviewStatus @default(PENDING)
-  explanation      Json?
-  analystNotes     String?
-  reviewedAt       DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id             String          @id @default(uuid())
+  step           Int
+  type           TransactionType
+  amount         Float
+  nameOrig       String
+  oldBalanceOrg  Float
+  newBalanceOrg  Float
+  nameDest       String
+  oldBalanceDest Float
+  newBalanceDest Float
+  createdAt      DateTime        @default(now())
+
+  prediction Prediction?
+
+  @@index([createdAt(sort: Desc)])
+}
+
+model Prediction {
+  id            String      @id @default(uuid())
+  transactionId String      @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  riskScore     Float
+  riskTier      RiskTier
+
+  // JSONB - stores { baseValue: number, topFeatures: [{feature, value}] },
+  // Kept as JSON rather than rigid columns since topFeatures is variable length.
+  explanation Json
+  createdAt   DateTime @default(now())
 
   @@index([riskTier])
-  @@index([status])
-  @@index([createdAt])
-  @@index([riskScore])
 }
