@@ -1,407 +1,174 @@
-import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import {
-  ArrowLeft,
-  CheckCircle,
-  XCircle,
-  AlertOctagon,
-  User,
-  TrendingUp,
-  TrendingDown,
-} from 'lucide-react';
-import {
-  getTransactionById,
-  updateTransactionStatus,
-  type Transaction,
-} from '@/lib/api';
+import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
+import { useTransaction } from '@/hooks/useTransactions';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import type { RiskTier } from '@/types/';
+
+function riskBadgeVariant(tier: RiskTier): 'destructive' | 'secondary' | 'outline' {
+  if (tier === 'high') return 'destructive';
+  if (tier === 'medium') return 'secondary';
+  return 'outline';
+}
 
 export default function TransactionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [tx, setTx] = useState<Transaction | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [reviewStatus, setReviewStatus] = useState<string>('');
-  const [analystNotes, setAnalystNotes] = useState<string>('');
-  const [saving, setSaving] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
+  const { data: tx, isLoading, error } = useTransaction(id ?? '');
 
-  useEffect(() => {
-    async function loadTx() {
-      if (!id) return;
-      try {
-        const data = await getTransactionById(id);
-        setTx(data);
-        setReviewStatus(data.status);
-        setAnalystNotes(data.analystNotes || '');
-      } catch (err) {
-        console.error('Failed to load transaction:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadTx();
-  }, [id]);
-
-  async function handleReviewSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!id || !reviewStatus) return;
-    setSaving(true);
-    setSuccessMsg('');
-    try {
-      const updated = await updateTransactionStatus(
-        id,
-        reviewStatus as 'PENDING' | 'APPROVED' | 'REJECTED' | 'ESCALATED',
-        analystNotes,
-      );
-      setTx(updated);
-      setSuccessMsg(`Status updated to ${reviewStatus} successfully.`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update';
-      alert(`Error updating status: ${msg}`);
-    } finally {
-      setSaving(false);
-    }
+  if (isLoading) {
+    return <p className="text-muted-foreground text-center">Loading transaction...</p>;
   }
 
-  if (loading) {
+  if (error || !tx) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-sm font-medium text-slate-500">Loading transaction details...</div>
-      </div>
-    );
-  }
-
-  if (!tx) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-lg font-semibold text-slate-900">Transaction Not Found</h2>
-        <Link to="/review-queue" className="mt-4 inline-block text-sm text-red-600 hover:underline">
-          Return to Review Queue
+      <div className="text-center">
+        <h2 className="text-lg font-semibold">Transaction not found</h2>
+        <Link to="/review-queue" className="text-primary mt-4 inline-block text-sm hover:underline">
+          Back to Review Queue
         </Link>
       </div>
     );
   }
 
-  const explanation = tx.explanation;
-  const topRisk = explanation?.top_risk_factors || [];
-  const topMitigating = explanation?.top_mitigating_factors || [];
+  // SHAP contributions ranked by absolute impact - a feature pushing the
+  // score down hard is just as worth showing as one pushing it up.
+  const rankedFeatures = [...tx.prediction.explanation.topFeatures].sort(
+    (a, b) => Math.abs(b.value) - Math.abs(a.value),
+  );
+  const maxAbsValue = Math.max(...rankedFeatures.map((f) => Math.abs(f.value)), 0.0001);
 
   return (
-    <div className="space-y-8">
-      {/* Top Nav */}
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Link
           to="/review-queue"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Review Queue
         </Link>
-        <span className="font-mono text-xs text-slate-400">ID: {tx.id}</span>
+        <span className="text-muted-foreground font-mono text-xs">ID: {tx.id}</span>
       </div>
 
-      {/* Header Banner */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-        <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+      <Card>
+        <CardContent className="flex flex-col justify-between gap-4 pt-6 sm:flex-row sm:items-center">
           <div>
-            <div className="flex items-center gap-3">
-              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-800">
-                {tx.type}
-              </span>
-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{tx.type}</Badge>
+              <h1 className="text-2xl font-bold">
                 ${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </h1>
             </div>
-            <p className="mt-1.5 text-xs text-slate-500">
-              Evaluated on {new Date(tx.createdAt).toLocaleString()} (Simulation Step {tx.step})
+            <p className="text-muted-foreground mt-1 text-xs">
+              Step {tx.step} · Evaluated {new Date(tx.createdAt).toLocaleString()}
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-xs font-medium text-slate-500">Risk Score</p>
-              <p
-                className={`text-3xl font-black ${
-                  tx.riskTier === 'HIGH'
-                    ? 'text-rose-600'
-                    : tx.riskTier === 'MEDIUM'
-                    ? 'text-amber-500'
-                    : 'text-emerald-600'
-                }`}
-              >
-                {tx.riskScore} <span className="text-sm font-normal text-slate-400">/ 100</span>
+          <div className="text-right">
+            <p className="text-muted-foreground text-xs">Risk Score</p>
+            <p className="text-3xl font-bold">{(tx.prediction.riskScore * 100).toFixed(0)}</p>
+            <Badge variant={riskBadgeVariant(tx.prediction.riskTier)} className="mt-1">
+              {tx.prediction.riskTier} risk
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Origin Account ({tx.nameOrig})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-muted-foreground">Balance Before</span>
+              <span className="font-mono">${tx.oldBalanceOrg.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-muted-foreground">Amount</span>
+              <span className="text-destructive font-mono">-${tx.amount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Balance After</span>
+              <span className="font-mono">${tx.newBalanceOrg.toLocaleString()}</span>
+            </div>
+            {tx.newBalanceOrg === 0 && tx.oldBalanceOrg > 0 && (
+              <p className="bg-destructive/10 text-destructive mt-2 rounded-md p-2 text-xs">
+                Account drained to exactly $0 - a known fraud pattern.
               </p>
-            </div>
-            <div
-              className={`rounded-xl px-4 py-3 text-center ring-1 ring-inset ${
-                tx.riskTier === 'HIGH'
-                  ? 'bg-rose-50 text-rose-700 ring-rose-600/20'
-                  : tx.riskTier === 'MEDIUM'
-                  ? 'bg-amber-50 text-amber-700 ring-amber-600/20'
-                  : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
-              }`}
-            >
-              <p className="text-[10px] font-bold uppercase tracking-wider">Assigned Tier</p>
-              <p className="text-lg font-bold">{tx.riskTier}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid: Financial Entities & Review Action */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Origin & Destination Math */}
-        <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-            <h2 className="text-base font-semibold text-slate-900">Transaction Balance Math</h2>
-            <p className="text-xs text-slate-500">
-              Sanity check of balance changes before vs. after transaction.
-            </p>
-
-            <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {/* Origin Account */}
-              <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                  <User className="h-4 w-4 text-blue-600" />
-                  Origin Account ({tx.nameOrig})
-                </div>
-                <div className="mt-4 space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Balance Before</span>
-                    <span className="font-mono font-semibold text-slate-900">
-                      ${tx.oldbalanceOrg.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Deduction Amount</span>
-                    <span className="font-mono font-semibold text-rose-600">
-                      -${tx.amount.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-500">Balance After</span>
-                    <span className="font-mono font-semibold text-slate-900">
-                      ${tx.newbalanceOrig.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                {tx.newbalanceOrig === 0 && (
-                  <div className="mt-3 rounded bg-rose-50 p-2 text-[11px] font-medium text-rose-700">
-                    ⚠️ Account balance dropped to exactly $0 (draining flag).
-                  </div>
-                )}
-              </div>
-
-              {/* Destination Account */}
-              <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                  <User className="h-4 w-4 text-purple-600" />
-                  Destination Account ({tx.nameDest})
-                </div>
-                <div className="mt-4 space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Balance Before</span>
-                    <span className="font-mono font-semibold text-slate-900">
-                      ${tx.oldbalanceDest.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Transferred In</span>
-                    <span className="font-mono font-semibold text-emerald-600">
-                      +${tx.amount.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-500">Balance After</span>
-                    <span className="font-mono font-semibold text-slate-900">
-                      ${tx.newbalanceDest.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SHAP Waterfall Breakdown Visual */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">
-                  SHAP Explainability Waterfall
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Exact feature contributions pushing risk score up (towards fraud) or down.
-                </p>
-              </div>
-              <span className="rounded-md bg-purple-50 px-2 py-0.5 text-xs font-bold text-purple-700">
-                TreeSHAP Attribution
-              </span>
-            </div>
-
-            <div className="mt-6 space-y-6">
-              {/* Risk Increasing Factors */}
-              <div>
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700">
-                  <TrendingUp className="h-4 w-4" />
-                  Top Risk-Increasing Features (+ Log-Odds)
-                </div>
-                <div className="mt-3 space-y-2.5">
-                  {topRisk.map((factor) => {
-                    const barWidth = Math.min(100, Math.max(10, Math.abs(factor.shap_value) * 15));
-                    return (
-                      <div key={factor.feature} className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="font-mono font-medium text-slate-800">
-                            {factor.feature}
-                            <span className="ml-2 text-slate-400 font-normal">
-                              (val: {String(factor.feature_value)})
-                            </span>
-                          </span>
-                          <span className="font-mono font-bold text-rose-600">
-                            +{factor.shap_value.toFixed(4)}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-slate-100">
-                          <div
-                            className="h-2 rounded-full bg-rose-500"
-                            style={{ width: `${barWidth}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {topRisk.length === 0 && (
-                    <p className="text-xs text-slate-400">No positive risk drivers detected.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Risk Mitigating Factors */}
-              <div className="border-t border-slate-100 pt-5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                  <TrendingDown className="h-4 w-4" />
-                  Top Mitigating Features (- Log-Odds)
-                </div>
-                <div className="mt-3 space-y-2.5">
-                  {topMitigating.map((factor) => {
-                    const barWidth = Math.min(100, Math.max(10, Math.abs(factor.shap_value) * 15));
-                    return (
-                      <div key={factor.feature} className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="font-mono font-medium text-slate-800">
-                            {factor.feature}
-                            <span className="ml-2 text-slate-400 font-normal">
-                              (val: {String(factor.feature_value)})
-                            </span>
-                          </span>
-                          <span className="font-mono font-bold text-emerald-600">
-                            {factor.shap_value.toFixed(4)}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-slate-100">
-                          <div
-                            className="h-2 rounded-full bg-emerald-500"
-                            style={{ width: `${barWidth}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Analyst Decision Action Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-          <h2 className="text-base font-semibold text-slate-900">Analyst Review Action</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Record compliance decision and audit justification.
-          </p>
-
-          <form onSubmit={handleReviewSubmit} className="mt-6 space-y-4">
-            <div>
-              <label className="text-xs font-medium text-slate-700">Decision Outcome</label>
-              <div className="mt-2 space-y-2">
-                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="APPROVED"
-                    checked={reviewStatus === 'APPROVED'}
-                    onChange={(e) => setReviewStatus(e.target.value)}
-                    className="text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">Approve Transaction</p>
-                    <p className="text-[11px] text-slate-500">Cleared as verified legitimate</p>
-                  </div>
-                </label>
-
-                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="REJECTED"
-                    checked={reviewStatus === 'REJECTED'}
-                    onChange={(e) => setReviewStatus(e.target.value)}
-                    className="text-rose-600 focus:ring-rose-500"
-                  />
-                  <XCircle className="h-4 w-4 text-rose-600" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">Reject & Block</p>
-                    <p className="text-[11px] text-slate-500">Confirmed fraudulent behavior</p>
-                  </div>
-                </label>
-
-                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
-                  <input
-                    type="radio"
-                    name="status"
-                    value="ESCALATED"
-                    checked={reviewStatus === 'ESCALATED'}
-                    onChange={(e) => setReviewStatus(e.target.value)}
-                    className="text-purple-600 focus:ring-purple-500"
-                  />
-                  <AlertOctagon className="h-4 w-4 text-purple-600" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">Escalate to Senior Fraud Team</p>
-                    <p className="text-[11px] text-slate-500">Requires further customer contact</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-slate-700">Audit Justification / Notes</label>
-              <textarea
-                rows={4}
-                value={analystNotes}
-                onChange={(e) => setAnalystNotes(e.target.value)}
-                placeholder="Document reasons for decision (e.g. verified origin account drain with customer)..."
-                className="mt-1.5 w-full rounded-lg border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-red-600 focus:outline-hidden"
-              />
-            </div>
-
-            {successMsg && (
-              <div className="rounded-lg bg-emerald-50 p-2.5 text-xs font-medium text-emerald-700">
-                {successMsg}
-              </div>
             )}
+          </CardContent>
+        </Card>
 
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full rounded-lg bg-slate-900 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 disabled:opacity-50"
-            >
-              {saving ? 'Saving Decision...' : 'Save Compliance Decision'}
-            </button>
-          </form>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Destination Account ({tx.nameDest})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-muted-foreground">Balance Before</span>
+              <span className="font-mono">${tx.oldBalanceDest.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-muted-foreground">Amount Received</span>
+              <span className="font-mono text-green-600">+${tx.amount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Balance After</span>
+              <span className="font-mono">${tx.newBalanceDest.toLocaleString()}</span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">SHAP Explanation</CardTitle>
+          <p className="text-muted-foreground text-xs">
+            Base value {tx.prediction.explanation.baseValue.toFixed(4)}, adjusted by each feature
+            below to reach the final risk score.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {rankedFeatures.length === 0 && (
+            <p className="text-muted-foreground text-sm">
+              No explanation available for this transaction.
+            </p>
+          )}
+
+          {rankedFeatures.map((feature) => {
+            const isPositive = feature.value > 0;
+            const barWidth = (Math.abs(feature.value) / maxAbsValue) * 100;
+
+            return (
+              <div key={feature.feature} className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 font-mono">
+                    {isPositive ? (
+                      <TrendingUp className="text-destructive h-3.5 w-3.5" />
+                    ) : (
+                      <TrendingDown className="h-3.5 w-3.5 text-green-600" />
+                    )}
+                    {feature.feature}
+                  </span>
+                  <span
+                    className={`font-mono font-semibold ${isPositive ? 'text-destructive' : 'text-green-600'}`}
+                  >
+                    {isPositive ? '+' : ''}
+                    {feature.value.toFixed(4)}
+                  </span>
+                </div>
+                <div className="bg-muted h-2 w-full rounded-full">
+                  <div
+                    className={`h-2 rounded-full ${isPositive ? 'bg-destructive' : 'bg-green-600'}`}
+                    style={{ width: `${barWidth}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 }
