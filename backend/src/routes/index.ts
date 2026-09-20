@@ -4,6 +4,7 @@ import {
   getTransactionHandler,
   listTransactionsHandler,
   predictHandler,
+  simulateHandler,
 } from '../controllers/prediction.controller.js';
 import { getStatsHandler } from '../controllers/stats.controller.js';
 
@@ -16,6 +17,9 @@ router.get('/health', healthCheckHandler);
 router.post('/predict', predictHandler);
 router.get('/transactions', listTransactionsHandler);
 router.get('/transactions/:id', getTransactionHandler);
+
+// Simulate Prediction - what if sandox
+router.post('/simulate', simulateHandler);
 
 // Stats
 router.get('/stats', getStatsHandler);

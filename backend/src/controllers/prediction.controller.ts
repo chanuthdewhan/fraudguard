@@ -4,6 +4,7 @@ import {
   scoreTransaction,
   getTransaction,
   getRecentTransactions,
+  simulateTransaction,
 } from '../services/prediction.service.js';
 import type { RiskTier } from '../types/transaction.js';
 
@@ -70,4 +71,25 @@ export async function listTransactionsHandler(req: Request, res: Response) {
   const riskTier = parseRiskTier(req.query.riskTier);
   const transactions = await getRecentTransactions(riskTier);
   res.json({ transactions });
+}
+
+export async function simulateHandler(req: Request, res: Response) {
+  const parsed = transactionSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: { message: 'Invalid transaction data', code: 'VALIDATION_ERROR' },
+      details: parsed.error.flatten(),
+    });
+  }
+
+  try {
+    const result = await simulateTransaction(parsed.data);
+    res.json(result);
+  } catch (err) {
+    console.error('Simulation failed:', err);
+    res
+      .status(502)
+      .json({ error: { message: 'ML service unavailable', code: 'UPSTREAM_SERVICE_ERROR' } });
+  }
 }

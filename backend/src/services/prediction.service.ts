@@ -34,3 +34,20 @@ export async function getRecentTransactions(riskTier?: RiskTier) {
 }
 
 export class UpstreamServiceError extends Error {}
+
+export async function simulateTransaction(input: TransactionInput): Promise<PredictionResult> {
+  // Same ML service call as scoreTransaction, but deliberately does NOT
+  // save anything - a what-if scenario is hypothetical, not a real
+  // transaction, and shouldn't pollute the Transaction table.
+  const response = await fetch(`${ML_SERVICE_URL}/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    throw new UpstreamServiceError(`ML service returned ${response.status}`);
+  }
+
+  return (await response.json()) as PredictionResult;
+}
