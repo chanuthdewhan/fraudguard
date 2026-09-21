@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ml_service.schemas import TransactionInput, PredictionResult, ExplanationData
-from ml_service.inference import predict, build_feature_row
 from ml_service.explain import explain
+from ml_service.inference import build_feature_row, predict
+from ml_service.schemas import ExplanationData, PredictionResult, TransactionInput
 
 app = FastAPI(title="FraudGuard ML Service")
 

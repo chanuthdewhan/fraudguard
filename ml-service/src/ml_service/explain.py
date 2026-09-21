@@ -1,10 +1,10 @@
 """SHAP explainability for a single transaction using the modern API."""
 
-import shap
 import pandas as pd
+import shap
 
 from ml_service.inference import _model
-from ml_service.schemas import ShapContribution, ExplanationData
+from ml_service.schemas import ExplanationData, ShapContribution
 
 _explainer = shap.TreeExplainer(_model)
 TOP_N_FEATURES = 5
