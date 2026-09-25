@@ -1,114 +1,125 @@
-import { useEffect, useState } from 'react';
-import {
-  Sparkles,
-  Award,
-  BarChart3,
-  Layers,
-} from 'lucide-react';
-import { getModelInfo, type ModelInfoData, type ModelBenchmark } from '@/lib/api';
+import { Award, BarChart3, Layers, Sparkles, AlertTriangle } from 'lucide-react';
+
+// All content on this page is static - it describes facts about how the
+// model was trained, which don't change per request, unlike Dashboard/Stats
+// which reflect live transaction data.
+
+const MODEL_COMPARISON = [
+  {
+    name: 'Logistic Regression (baseline)',
+    imbalanceHandling: 'None (deliberately)',
+    recall: 0.61,
+    precision: 0.91,
+    prAuc: 0.786,
+    isFinal: false,
+  },
+  {
+    name: 'XGBoost',
+    imbalanceHandling: 'scale_pos_weight (36.53)',
+    recall: 0.999,
+    precision: 0.998,
+    prAuc: 0.999,
+    isFinal: true,
+  },
+];
+
+const ENGINEERED_FEATURES = [
+  {
+    num: 1,
+    name: 'errorBalanceOrig',
+    formula: 'oldBalanceOrg - amount - newBalanceOrg',
+    description:
+      "Balance discrepancy flag. See the limitation note below on why this signal's direction is counterintuitive.",
+  },
+  {
+    num: 2,
+    name: 'errorBalanceDest',
+    formula: 'oldBalanceDest + amount - newBalanceDest',
+    description: 'Same idea applied to the destination account.',
+  },
+  {
+    num: 3,
+    name: 'origDrainedToZero',
+    formula: 'newBalanceOrg == 0 and oldBalanceOrg > 0',
+    description: 'Classic account-draining pattern - present in 97.55% of fraud cases in EDA.',
+  },
+  {
+    num: 4,
+    name: 'logAmount',
+    formula: 'log1p(amount)',
+    description: 'Corrects the heavy right-skew in transaction amounts found in EDA.',
+  },
+  {
+    num: 5,
+    name: 'amountToBalanceRatio',
+    formula: 'amount / (oldBalanceOrg + 1)',
+    description: 'How much of an account was moved in one transaction.',
+  },
+  {
+    num: 6,
+    name: 'hourSin & hourCos',
+    formula: 'sin/cos(2π × (step % 24) / 24)',
+    description: 'Cyclical hour-of-day encoding, so hour 23 and hour 0 are treated as adjacent.',
+  },
+  {
+    num: 7,
+    name: 'type_* (one-hot)',
+    formula: 'One-hot encoding of transaction type',
+    description: 'Only 5 categories; fraud concentrates in TRANSFER and CASH_OUT specifically.',
+  },
+  {
+    num: 8,
+    name: 'origFrequency & destFrequency',
+    formula: 'Frequency-encoded nameOrig / nameDest',
+    description:
+      'Too high-cardinality to one-hot; how often an account appears is informative on its own.',
+  },
+];
 
 export default function InsightsPage() {
-  const [modelInfo, setModelInfo] = useState<ModelInfoData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadInfo() {
-      try {
-        const data = await getModelInfo();
-        setModelInfo(data);
-      } catch (err) {
-        console.error('Failed to load model info:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadInfo();
-  }, []);
-
-  const benchmarks = modelInfo?.benchmarks || [];
-
-  const engineeredFeatures = [
-    {
-      num: 1,
-      name: 'errorBalanceOrig',
-      formula: 'oldbalanceOrg - amount - newbalanceOrig',
-      description:
-        'Accounting discrepancy flag. When balance does not equal old minus amount, high fraud probability indicator.',
-    },
-    {
-      num: 2,
-      name: 'isZeroBalanceOrig',
-      formula: 'newbalanceOrig == 0.0',
-      description:
-        'Binary draining flag. Captures attacks that completely drain victim accounts.',
-    },
-    {
-      num: 3,
-      name: 'log_amount',
-      formula: 'log1p(amount)',
-      description:
-        'Handles extreme right-skewed heavy tail distribution of transaction values.',
-    },
-    {
-      num: 4,
-      name: 'errorBalanceDest',
-      formula: 'oldbalanceDest + amount - newbalanceDest',
-      description:
-        'Destination discrepancy flag. Flags when receiving account does not reflect full transferred sum.',
-    },
-    {
-      num: 5,
-      name: 'drain_ratio',
-      formula: 'amount / (oldbalanceOrg + 1)',
-      description:
-        'Fraction of origin balance drained in a single transaction. Extreme values indicate takeover.',
-    },
-    {
-      num: 6,
-      name: 'step_sin & step_cos',
-      formula: 'sin/cos(2 * pi * (step % 24) / 24)',
-      description:
-        'Cyclical 24-hour periodic encoding capturing anomalous nocturnal attack patterns.',
-    },
-    {
-      num: 7,
-      name: 'nameOrig_freq & nameDest_freq',
-      formula: 'Frequency / total transaction ratio',
-      description:
-        'High-cardinality entity encoding. Distinguishes high-volume accounts from single-use burner accounts.',
-    },
-    {
-      num: 8,
-      name: 'orig_tx_count & orig_avg_amount',
-      formula: 'Historical expanding window aggregations',
-      description:
-        'Behavioral baseline. Compares current transaction amount against historical user average.',
-    },
-  ];
-
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
         <div className="flex items-center gap-2">
           <Award className="h-6 w-6 text-red-600" />
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Model Insights & Evaluation Benchmark
+            Model Insights & Evaluation
           </h1>
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          Model performance comparison across class imbalance strategies, PR-AUC evaluation, and TreeSHAP attribution theory.
+          How the fraud detection model was built, evaluated, and its known limitations.
         </p>
       </div>
 
-      {/* Model Benchmark Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+      <div className="space-y-2 rounded-xl border border-rose-200 bg-rose-50/60 p-6 shadow-xs">
+        <div className="flex items-center gap-2 text-sm font-semibold text-rose-700">
+          <AlertTriangle className="h-4 w-4" />
+          Known Limitation: Likely Simulation Artifact
+        </div>
+        <p className="text-xs leading-relaxed text-slate-700">
+          The model's near-perfect benchmark performance (PR-AUC 0.999) is very likely inflated by a
+          known artifact of how the PaySim dataset simulates fraud. Independent analyses have found
+          that a single rule - the transaction amount exactly equaling the account's full balance -
+          correctly identifies ~97.8% of fraud in this dataset, because PaySim's fraud-injection
+          logic drains accounts with suspiciously exact arithmetic that legitimate transactions
+          don't replicate as consistently.
+        </p>
+        <p className="text-xs leading-relaxed text-slate-700">
+          This means the model likely learned a property of the <em>simulator</em>, not necessarily
+          a pattern that generalises to real transaction data. Manual testing with hand-constructed
+          edge cases supports this: a large ($50,000) transfer that did <strong>not</strong> drain
+          the account was correctly scored low risk, confirming the model responds to the draining
+          pattern specifically - but this should still be treated as an upper-bound result specific
+          to this dataset, not a real-world performance claim.
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
         <div className="border-b border-slate-100 p-6">
-          <h2 className="text-base font-semibold text-slate-900">
-            Candidate Model Comparison Matrix
-          </h2>
+          <h2 className="text-base font-semibold text-slate-900">Model Comparison</h2>
           <p className="text-xs text-slate-500">
-            Benchmarked against test partition with PR-AUC as the primary optimization metric.
+            Both models evaluated on the identical, stratified test set. PR-AUC is the primary
+            metric, not accuracy - see below for why.
           </p>
         </div>
 
@@ -116,115 +127,97 @@ export default function InsightsPage() {
           <table className="w-full text-left text-xs">
             <thead className="border-b border-slate-100 bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-6 py-3 font-medium">Model Candidate</th>
+                <th className="px-6 py-3 font-medium">Model</th>
                 <th className="px-6 py-3 font-medium">Imbalance Handling</th>
-                <th className="px-6 py-3 font-medium">PR-AUC (Primary)</th>
-                <th className="px-6 py-3 font-medium">ROC-AUC</th>
-                <th className="px-6 py-3 font-medium">F1 Score (Fraud)</th>
-                <th className="px-6 py-3 font-medium">Precision</th>
-                <th className="px-6 py-3 font-medium">Recall</th>
-                <th className="px-6 py-3 font-medium">Confusion Matrix [TN, FP / FN, TP]</th>
+                <th className="px-6 py-3 font-medium">Fraud Recall</th>
+                <th className="px-6 py-3 font-medium">Fraud Precision</th>
+                <th className="px-6 py-3 font-medium">PR-AUC</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">
-                    Loading benchmark metrics...
+              {MODEL_COMPARISON.map((m) => (
+                <tr
+                  key={m.name}
+                  className={m.isFinal ? 'bg-red-50/40 font-medium' : 'hover:bg-slate-50/50'}
+                >
+                  <td className="flex items-center gap-2 px-6 py-3.5">
+                    {m.isFinal && (
+                      <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        FINAL
+                      </span>
+                    )}
+                    <span className="font-semibold text-slate-900">{m.name}</span>
+                  </td>
+                  <td className="px-6 py-3.5 text-slate-700">{m.imbalanceHandling}</td>
+                  <td className="px-6 py-3.5 font-mono text-slate-700">{m.recall.toFixed(3)}</td>
+                  <td className="px-6 py-3.5 font-mono text-slate-700">{m.precision.toFixed(3)}</td>
+                  <td className="px-6 py-3.5 font-mono font-bold text-rose-600">
+                    {m.prAuc.toFixed(3)}
                   </td>
                 </tr>
-              ) : (
-                benchmarks.map((bm: ModelBenchmark, idx: number) => {
-                  const isSelected = bm.model_name === 'XGBoost';
-                  return (
-                    <tr
-                      key={idx}
-                      className={isSelected ? 'bg-red-50/40 font-medium' : 'hover:bg-slate-50/50'}
-                    >
-                      <td className="px-6 py-3.5 flex items-center gap-2">
-                        {isSelected && (
-                          <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                            FINAL
-                          </span>
-                        )}
-                        <span className="font-semibold text-slate-900">{bm.model_name}</span>
-                      </td>
-                      <td className="px-6 py-3.5 text-slate-700">{bm.imbalance_strategy}</td>
-                      <td className="px-6 py-3.5 font-mono font-bold text-rose-600">
-                        {bm.pr_auc?.toFixed(4)}
-                      </td>
-                      <td className="px-6 py-3.5 font-mono text-slate-700">
-                        {bm.roc_auc?.toFixed(4)}
-                      </td>
-                      <td className="px-6 py-3.5 font-mono text-slate-700">{bm.f1?.toFixed(4)}</td>
-                      <td className="px-6 py-3.5 font-mono text-slate-700">
-                        {bm.precision?.toFixed(4)}
-                      </td>
-                      <td className="px-6 py-3.5 font-mono text-slate-700">
-                        {bm.recall?.toFixed(4)}
-                      </td>
-                      <td className="px-6 py-3.5 font-mono text-slate-500">
-                        [{bm.confusion_matrix?.[0]?.[0]}, {bm.confusion_matrix?.[0]?.[1]} /{' '}
-                        {bm.confusion_matrix?.[1]?.[0]}, {bm.confusion_matrix?.[1]?.[1]}]
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Viva Defense Guide Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-2">
-          <div className="flex items-center gap-2 text-rose-700 font-semibold text-sm">
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="flex items-center gap-2 text-sm font-semibold text-rose-700">
             <BarChart3 className="h-4 w-4" />
             Why Accuracy is Misleading
           </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            In PaySim, only ~0.13% of transactions are fraud. A trivial dummy model predicting 100% legitimate achieves 99.87% accuracy while catching zero fraud. <span className="font-semibold text-slate-900">PR-AUC (Precision-Recall AUC)</span> evaluates minority class performance without being inflated by overwhelming true negatives.
+          <p className="text-xs leading-relaxed text-slate-600">
+            Fraud is 0.129% of transactions in this dataset. A model predicting "never fraud" scores
+            99.87% accuracy while catching zero fraud - confirmed directly by our own baseline,
+            which hit 99% accuracy but only 61% fraud recall.{' '}
+            <span className="font-semibold text-slate-900">PR-AUC (Precision-Recall AUC)</span>{' '}
+            evaluates minority-class performance without being inflated by overwhelming true
+            negatives.
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-2">
-          <div className="flex items-center gap-2 text-purple-700 font-semibold text-sm">
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="flex items-center gap-2 text-sm font-semibold text-purple-700">
             <Layers className="h-4 w-4" />
             Class Imbalance Handling
           </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            We evaluated both <span className="font-semibold text-slate-900">class_weight='balanced'</span> and <span className="font-semibold text-slate-900">SMOTE (Synthetic Minority Over-sampling Technique)</span>. XGBoost paired with scale_pos_weight optimizes loss penalization directly without generating synthetic artifacts in high-cardinality space.
+          <p className="text-xs leading-relaxed text-slate-600">
+            <span className="font-semibold text-slate-900">scale_pos_weight</span> (36.53) was used
+            rather than resampling techniques like SMOTE, so the model trains on the real data
+            distribution while being penalised proportionally for missing fraud, without generating
+            synthetic data points.
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-2">
-          <div className="flex items-center gap-2 text-blue-700 font-semibold text-sm">
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+          <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
             <Sparkles className="h-4 w-4" />
-            TreeSHAP vs Raw Importance
+            Why SHAP, Not Raw Importance
           </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Raw Gini/gain feature importance is purely global and suffers from attribution bias. <span className="font-semibold text-slate-900">TreeSHAP</span> satisfies efficiency, symmetry, and monotonicity axioms, providing exact local log-odds attributions for each specific transaction.
+          <p className="text-xs leading-relaxed text-slate-600">
+            Raw gain/gini feature importance is purely global and can't explain one specific
+            prediction. <span className="font-semibold text-slate-900">SHAP's TreeExplainer</span>{' '}
+            gives exact, fast per-transaction attributions - a real reason XGBoost was chosen over
+            alternatives that would need slower, approximate explanation methods.
           </p>
         </div>
       </div>
 
-      {/* 8 Feature Engineering Techniques Grid */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
         <div className="border-b border-slate-100 pb-4">
-          <h2 className="text-base font-semibold text-slate-900">
-            Implemented Feature Engineering Pipeline (8 Techniques)
-          </h2>
+          <h2 className="text-base font-semibold text-slate-900">Feature Engineering Pipeline</h2>
           <p className="text-xs text-slate-500">
-            Domain-specific transforms implemented in <span className="font-mono text-slate-700">preprocessing.py</span>.
+            Implemented once in <span className="font-mono text-slate-700">preprocessing.py</span>,
+            shared between training and the live API to prevent training/serving skew.
           </p>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {engineeredFeatures.map((f) => (
+          {ENGINEERED_FEATURES.map((f) => (
             <div
               key={f.num}
-              className="rounded-lg border border-slate-100 bg-slate-50/60 p-4 space-y-2 text-xs"
+              className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-4 text-xs"
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono font-bold text-slate-900">{f.name}</span>
@@ -232,10 +225,10 @@ export default function InsightsPage() {
                   #{f.num}
                 </span>
               </div>
-              <p className="font-mono text-[11px] text-purple-700 bg-white p-1.5 rounded border border-slate-200/60">
+              <p className="rounded border border-slate-200/60 bg-white p-1.5 font-mono text-[11px] text-purple-700">
                 {f.formula}
               </p>
-              <p className="text-slate-600 text-[11px]">{f.description}</p>
+              <p className="text-[11px] text-slate-600">{f.description}</p>
             </div>
           ))}
         </div>
