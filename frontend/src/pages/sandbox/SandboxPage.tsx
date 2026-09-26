@@ -25,10 +25,62 @@ const TRANSACTION_TYPES: TransactionType[] = [
   'DEBIT',
 ];
 
+// Every preset is internally consistent (oldBalanceOrg - amount = newBalanceOrg
+// exactly) so it always represents a transaction that could actually happen -
+// the same rule the live slider enforces.
+const PRESETS: { label: string; transaction: TransactionInput; autoDrain: boolean }[] = [
+  {
+    label: 'Reset Baseline (Payment $25)',
+    transaction: { ...DEFAULT_TRANSACTION },
+    autoDrain: false,
+  },
+  {
+    label: 'Classic Drain Attack ($50,000 Transfer)',
+    transaction: {
+      step: 1,
+      type: 'TRANSFER',
+      amount: 50000,
+      nameOrig: 'C1231006815',
+      oldBalanceOrg: 50000,
+      newBalanceOrg: 0,
+      nameDest: 'C553264065',
+      oldBalanceDest: 0,
+      newBalanceDest: 0,
+    },
+    autoDrain: true,
+  },
+  {
+    label: 'High Value Cash Out - No Drain ($250k)',
+    transaction: {
+      step: 1,
+      type: 'CASH_OUT',
+      amount: 250000,
+      nameOrig: 'C1231006815',
+      oldBalanceOrg: 300000,
+      newBalanceOrg: 50000,
+      nameDest: 'C553264065',
+      oldBalanceDest: 0,
+      newBalanceDest: 250000,
+    },
+    autoDrain: false,
+  },
+];
+
 function riskBadgeVariant(tier: RiskTier): 'destructive' | 'secondary' | 'outline' {
   if (tier === 'high') return 'destructive';
   if (tier === 'medium') return 'secondary';
   return 'outline';
+}
+
+function riskTextColor(tier: RiskTier): string {
+  if (tier === 'high') return 'text-rose-600';
+  if (tier === 'medium') return 'text-amber-500';
+  return 'text-emerald-600';
+}
+
+// Score is a 0-1 probability; display it as a 0-100 integer everywhere.
+function displayScore(score: number): number {
+  return Math.round(score * 100);
 }
 
 export default function SandboxPage() {
@@ -54,12 +106,21 @@ export default function SandboxPage() {
   }, [modified]);
 
   function handleAmountChange(amount: number) {
-    setModified((prev) => ({
-      ...prev,
-      amount,
-      newBalanceOrg: autoDrain ? 0 : Math.max(0, prev.oldBalanceOrg - amount),
-      oldBalanceOrg: autoDrain ? amount : prev.oldBalanceOrg,
-    }));
+    setModified((prev) => {
+      if (autoDrain) {
+        return { ...prev, amount, oldBalanceOrg: amount, newBalanceOrg: 0 };
+      }
+
+      // Amount can never exceed the current balance - that would be an
+      // impossible transaction (spending money the account doesn't have)
+      // and produces a confusing, invalid errorBalanceOrig.
+      const clampedAmount = Math.min(amount, prev.oldBalanceOrg);
+      return {
+        ...prev,
+        amount: clampedAmount,
+        newBalanceOrg: prev.oldBalanceOrg - clampedAmount,
+      };
+    });
   }
 
   function handleTypeChange(type: TransactionType) {
@@ -77,9 +138,19 @@ export default function SandboxPage() {
     );
   }
 
+  function applyPreset(preset: (typeof PRESETS)[number]) {
+    setAutoDrain(preset.autoDrain);
+    setModified({ ...preset.transaction });
+  }
+
   const baseline = baselineSim.data;
   const result = modifiedSim.data;
-  const delta = baseline && result ? result.riskScore - baseline.riskScore : null;
+
+  // Delta is computed on the displayed (rounded) scores, so the sign and
+  // colour always match what the two numbers on screen actually show -
+  // avoids a red "+0" when the raw difference is a tiny fraction.
+  const delta =
+    baseline && result ? displayScore(result.riskScore) - displayScore(baseline.riskScore) : null;
 
   return (
     <div className="space-y-8">
@@ -100,6 +171,23 @@ export default function SandboxPage() {
             <CardTitle className="text-base">Adjust Parameters</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div>
+              <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                Quick Scenarios
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => applyPreset(preset)}
+                    className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <label className="text-xs font-medium">Transaction Type</label>
               <div className="mt-2 grid grid-cols-5 gap-1.5">
@@ -125,12 +213,18 @@ export default function SandboxPage() {
               <input
                 type="range"
                 min={1}
-                max={100000}
+                max={autoDrain ? 100000 : Math.max(modified.oldBalanceOrg, 1)}
                 step={100}
                 value={modified.amount}
                 onChange={(e) => handleAmountChange(Number(e.target.value))}
                 className="mt-2 w-full accent-red-600"
               />
+              {!autoDrain && (
+                <p className="text-muted-foreground mt-1 text-[11px]">
+                  Capped at the current origin balance (${modified.oldBalanceOrg.toLocaleString()})
+                  - an account can't send more than it has.
+                </p>
+              )}
             </div>
 
             <label className="flex items-center justify-between rounded-md border p-3 text-xs">
@@ -144,7 +238,7 @@ export default function SandboxPage() {
                 type="checkbox"
                 checked={autoDrain}
                 onChange={(e) => toggleAutoDrain(e.target.checked)}
-                className="accent-primary h-4 w-4"
+                className="h-4 w-4 accent-red-600"
               />
             </label>
 
@@ -172,6 +266,10 @@ export default function SandboxPage() {
                 />
               </div>
             </div>
+            <p className="text-muted-foreground text-[11px]">
+              Editing these directly can intentionally create a balance mismatch, useful for
+              exploring how <span className="font-mono">errorBalanceOrig</span> affects the score.
+            </p>
           </CardContent>
         </Card>
 
@@ -189,7 +287,7 @@ export default function SandboxPage() {
               <div>
                 <p className="text-muted-foreground text-[11px]">Baseline</p>
                 <p className="text-xl font-bold">
-                  {baseline ? (baseline.riskScore * 100).toFixed(0) : '—'}
+                  {baseline ? displayScore(baseline.riskScore) : '—'}
                 </p>
                 {baseline && (
                   <Badge variant={riskBadgeVariant(baseline.riskTier)}>{baseline.riskTier}</Badge>
@@ -200,18 +298,26 @@ export default function SandboxPage() {
                 <ArrowRight className="text-muted-foreground h-4 w-4" />
                 {delta !== null && (
                   <span
-                    className={`mt-1 text-xs font-bold ${delta > 0 ? 'text-rose-600' : delta < 0 ? 'text-emerald-600' : 'text-slate-500'}`}
+                    className={`mt-1 text-xs font-bold ${
+                      delta > 0
+                        ? 'text-rose-600'
+                        : delta < 0
+                          ? 'text-emerald-600'
+                          : 'text-slate-900'
+                    }`}
                   >
                     {delta > 0 ? '+' : ''}
-                    {(delta * 100).toFixed(0)}
+                    {delta}
                   </span>
                 )}
               </div>
 
               <div>
                 <p className="text-muted-foreground text-[11px]">Simulated</p>
-                <p className="text-2xl font-black">
-                  {result ? (result.riskScore * 100).toFixed(0) : '—'}
+                <p
+                  className={`text-2xl font-black ${result ? riskTextColor(result.riskTier) : ''}`}
+                >
+                  {result ? displayScore(result.riskScore) : '—'}
                 </p>
                 {result && (
                   <Badge variant={riskBadgeVariant(result.riskTier)}>{result.riskTier}</Badge>
@@ -234,7 +340,9 @@ export default function SandboxPage() {
                   >
                     <span className="font-mono">{f.feature}</span>
                     <span
-                      className={`font-mono font-semibold ${f.value > 0 ? 'text-rose-600' : 'text-emerald-600'}`}
+                      className={`font-mono font-semibold ${
+                        f.value > 0 ? 'text-rose-600' : 'text-emerald-600'
+                      }`}
                     >
                       {f.value > 0 ? '+' : ''}
                       {f.value.toFixed(4)}
