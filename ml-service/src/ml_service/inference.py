@@ -1,16 +1,19 @@
 """Loads the trained model once at startup and evaluates features."""
 
+import os
 from pathlib import Path
-
 import joblib
 import pandas as pd
 
 from ml_service.preprocessing import NON_FEATURE_COLUMNS, engineer_features
 from ml_service.schemas import TransactionInput
 
-MODEL_PATH = Path(__file__).parent.parent.parent / "models" / "xgboost_fraud_model.pkl"
-FEATURE_COLUMNS_PATH = Path(__file__).parent.parent.parent / "models" / "feature_columns.pkl"
+MODEL_DIR = Path(__file__).parent / "models"
 
+MODEL_PATH = MODEL_DIR / "xgboost_fraud_model.pkl"
+FEATURE_COLUMNS_PATH = MODEL_DIR / "feature_columns.pkl"
+
+# Load the model parameters
 _model = joblib.load(MODEL_PATH)
 _feature_columns: list[str] = joblib.load(FEATURE_COLUMNS_PATH)
 
