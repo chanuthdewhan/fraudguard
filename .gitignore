@@ -15,7 +15,6 @@ __pycache__/
 .env.local
 
 # ML artifacts and data 
-ml-service/models/*.pkl
 ml-service/data/raw/*
 !ml-service/data/raw/.gitkeep
 
