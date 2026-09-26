@@ -4,15 +4,15 @@
   "description": "Core REST API for FraudGuard - handles transactions, review queue, and calls the ML service for scoring.",
   "main": "src/index.ts",
   "type": "module",
-  "scripts": {
-    "dev": "tsx --watch --env-file=.env src/index.ts",
-    "prisma:generate": "prisma generate",
-    "build": "prisma generate && tsc",
-    "vercel-build": "prisma generate && tsc",
-    "start": "node --env-file=.env dist/index.js",
-    "lint": "eslint .",
-    "prisma:migrate": "prisma migrate dev"
-  },
+"scripts": {
+  "dev": "tsx --watch --env-file=.env src/index.ts",
+  "prisma:generate": "prisma generate",
+  "build": "prisma generate && tsc",
+  "vercel-build": "prisma generate", 
+  "start": "node --env-file=.env dist/index.js",
+  "lint": "eslint .",
+  "prisma:migrate": "prisma migrate dev"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
